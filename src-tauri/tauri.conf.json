@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Genie Recorder",
+  "version": "0.1.0",
+  "identifier": "com.demo.genierecorder",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "genie",
+        "title": "Genie",
+        "width": 260,
+        "height": 340,
+        "x": 0,
+        "y": 10000,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": false,
+        "resizable": false,
+        "shadow": false,
+        "center": false
+      }
+    ],
+    "security": { "csp": null },
+    "macOSPrivateApi": true
+  },
+  "plugins": {},
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.ico", "icons/icon.png"]
+  }
+}
