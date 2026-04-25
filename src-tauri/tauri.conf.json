@@ -25,6 +25,20 @@
         "resizable": false,
         "shadow": false,
         "center": false
+      },
+      {
+        "label": "config-ledger",
+        "title": "Genie Recorder — Config",
+        "width": 480,
+        "height": 640,
+        "transparent": false,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false,
+        "center": true,
+        "url": "ledger.html"
       }
     ],
     "security": { "csp": null },

@@ -15,177 +15,223 @@ html, body, #root {
   background: transparent;
 }
 
-/* The window is 260x340 positioned at bottom-left of the screen.
-   Entry path within the window:
-     start: bottom-center (x: 50%, y: 100%+) big and moving up
-     mid:   top-center (x: 50%, y: 10%) hovering
-     end:   bottom-left, peeking (x: 20px from left, y: bottom)
-*/
+/* ─────────────────────────────────────────────
+   GENIE WRAP — fly-in only, GPU-promoted layer
+   Breathing is on the child .genie-float so
+   there's NO animation chain gap on this element
+───────────────────────────────────────────── */
 .genie-wrap {
   position: absolute;
   left: 0;
   top: 0;
-  width: 140px;            /* smaller genie */
-  height: 180px;
-  transform: translate(50px, 100vh) scale(0.6);
+  width: 150px;
+  height: 200px;
+  /* Start already on GPU compositor layer */
+  transform: translate3d(-15px, 340px, 0) scale(0.6);
   opacity: 0;
-  transform-origin: center center;
+  transform-origin: center bottom;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  isolation: isolate;
 }
 
 .stage.entered .genie-wrap {
-  animation: fly-in 2.4s cubic-bezier(0.45, 0.05, 0.35, 1) forwards;
+  animation: fly-in 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/*  Path (inside a 260x340 window):
-      0%   off-screen bottom-center, small & faded
-      20%  rising up the center, full opacity
-      45%  peak near top-center, slight overshoot
-      60%  starts curving left & descending
-      85%  approaching final resting spot bottom-left
-      100% peeking position: bottom-left, slightly tucked behind bottom edge
-*/
+/* Pure translate3d + scale only — NO rotate, cheapest GPU path */
 @keyframes fly-in {
-  0% {
-    transform: translate(60px, 320px) scale(0.55) rotate(-6deg);
-    opacity: 0;
-  }
-  15% {
-    transform: translate(60px, 240px) scale(0.75) rotate(-4deg);
-    opacity: 1;
-  }
-  35% {
-    transform: translate(55px, 100px) scale(1.05) rotate(2deg);
-    opacity: 1;
-  }
-  50% {
-    transform: translate(55px, 40px) scale(1.05) rotate(0deg);
-    opacity: 1;
-  }
-  70% {
-    transform: translate(25px, 120px) scale(0.95) rotate(-6deg);
-    opacity: 1;
-  }
-  90% {
-    transform: translate(-10px, 190px) scale(0.92) rotate(-4deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-15px, 200px) scale(0.92) rotate(0deg);
-    opacity: 1;
-  }
+  0%   { transform: translate3d(-15px, 340px, 0) scale(0.55); opacity: 0;   }
+  12%  { transform: translate3d(-15px, 260px, 0) scale(0.72); opacity: 1;   }
+  30%  { transform: translate3d(-15px, 120px, 0) scale(1.04); opacity: 1;   }
+  48%  { transform: translate3d(-15px,  36px, 0) scale(1.06); opacity: 1;   }
+  66%  { transform: translate3d(-15px, 140px, 0) scale(0.96); opacity: 1;   }
+  84%  { transform: translate3d(-15px, 195px, 0) scale(0.915); opacity: 1;  }
+  100% { transform: translate3d(-15px, 200px, 0) scale(0.92);  opacity: 1;  }
 }
 
-/* Gentle breathing once settled */
-.stage.entered .genie-wrap {
-  animation: fly-in 2.4s cubic-bezier(0.45, 0.05, 0.35, 1) forwards,
-             settle-breathe 3.5s ease-in-out 2.4s infinite;
+/* ── Breathing lives here — child element, no chain conflict ── */
+.genie-float {
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
-@keyframes settle-breathe {
-  0%, 100% { transform: translate(-15px, 200px) scale(0.92); }
-  50%      { transform: translate(-15px, 197px) scale(0.935); }
+.stage.entered .genie-float {
+  animation: breathe 3.6s ease-in-out 2.25s infinite;
+}
+@keyframes breathe {
+  0%, 100% { transform: translate3d(0, 0,    0) scale(1);     }
+  50%       { transform: translate3d(0, -3px, 0) scale(1.016); }
 }
 
+/* ─────────────────────────────────────────────
+   GENIE SVG
+───────────────────────────────────────────── */
 .genie {
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 8px 20px rgba(16, 185, 129, 0.45));
 }
-.genie svg { width: 100%; height: 100%; overflow: visible; }
+.genie svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  will-change: transform;
+  backface-visibility: hidden;
+}
 
-/* Tail waves constantly — smooth sinusoidal motion */
+/* ─────────────────────────────────────────────
+   ANIMATED PARTS — all GPU-composited
+───────────────────────────────────────────── */
 .tail {
-  transform-origin: 100px 170px;
+  transform-origin: 98px 215px;
   animation: tail-wave 1.8s ease-in-out infinite;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 @keyframes tail-wave {
-  0%, 100% { transform: rotate(-10deg) scaleX(1); }
-  25%      { transform: rotate(4deg)   scaleX(1.05); }
-  50%      { transform: rotate(12deg)  scaleX(1); }
-  75%      { transform: rotate(2deg)   scaleX(0.95); }
+  0%, 100% { transform: translate3d(0,0,0) rotate(-8deg)  scaleX(1); }
+  25%       { transform: translate3d(0,0,0) rotate(5deg)   scaleX(1.04); }
+  50%       { transform: translate3d(0,0,0) rotate(12deg)  scaleX(1); }
+  75%       { transform: translate3d(0,0,0) rotate(3deg)   scaleX(0.97); }
 }
 
-/* Subtle arm sway while flying */
 .arms {
-  transform-origin: 100px 160px;
+  transform-origin: 100px 165px;
   animation: arms-sway 2.2s ease-in-out infinite;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 @keyframes arms-sway {
-  0%, 100% { transform: rotate(-2deg); }
-  50%      { transform: rotate(2deg); }
+  0%, 100% { transform: translate3d(0,0,0) rotate(-2deg); }
+  50%       { transform: translate3d(0,0,0) rotate(2deg); }
 }
 
-/* Head nodding when recording */
+/* Head nod only while recording */
 .genie.nodding .head {
-  transform-origin: 100px 115px;
+  transform-origin: 100px 92px;
   animation: nod 1.3s ease-in-out infinite;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 @keyframes nod {
-  0%, 100% { transform: rotate(-5deg); }
-  50%      { transform: rotate(5deg); }
+  0%, 100% { transform: translate3d(0,0,0) rotate(-4deg); }
+  50%       { transform: translate3d(0,0,0) rotate(4deg); }
 }
 
 /* Aura pulse */
 .aura {
-  transform-origin: 100px 130px;
+  transform-origin: 100px 165px;
   animation: pulse 2.8s ease-in-out infinite;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
-.genie-wrap.recording .aura { animation-duration: 1.4s; }
+.genie-wrap.recording .genie-float .aura { animation-duration: 1.4s; }
 @keyframes pulse {
-  0%, 100% { opacity: 0.35; transform: scale(1); }
-  50%      { opacity: 0.75; transform: scale(1.06); }
+  0%, 100% { opacity: 0.35; transform: translate3d(0,0,0) scale(1); }
+  50%       { opacity: 0.75; transform: translate3d(0,0,0) scale(1.07); }
 }
 
-/* --- Controls: floating pills above the head --- */
+/* ─────────────────────────────────────────────
+   CONTROLS — arc above the genie head
+   Container starts at top:-80px so buttons
+   with negative offsets stay inside bounds
+   (pointer-events require containment)
+───────────────────────────────────────────── */
 .controls {
   position: absolute;
-  top: 28px;
-  left: 50%;
-  display: flex;
-  gap: 8px;
+  top: -80px;
+  left: -10px;
+  width: 175px;
+  height: 285px;
   opacity: 0;
-  transform: translateX(-30%) translateY(8px) scale(0.85);
   pointer-events: none;
-  transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 0.28s ease;
   z-index: 10;
 }
 .controls.show {
   opacity: 1;
-  transform: translateX(-30%) translateY(0) scale(1);
   pointer-events: auto;
 }
 
+/* Modern frosted-glass pill buttons */
 .btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.96);
-  color: #111;
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(15, 15, 20, 0.78);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  color: rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.14),
-    0 8px 20px rgba(0, 0, 0, 0.18),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.05);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+    0 4px 16px rgba(0, 0, 0, 0.28),
+    0 1px 3px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  will-change: transform;
 }
-.btn:hover  { transform: translateY(-2px); }
-.btn:active { transform: translateY(0) scale(0.94); }
+.btn:hover {
+  transform: translateY(-3px) scale(1.06);
+  background: rgba(30, 30, 40, 0.88);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.btn:active { transform: scale(0.92); }
 
-.btn-rec      { color: #dc2626; }
-.btn-pause    { color: #d97706; }
-.btn-stop     { color: #1f2937; }
-.btn-consent  { color: #0ea5e9; }
+/* Arc positions — container offset -10px left, -80px top
+   Arc center ≈ wrap (85, 5) → container (95, 85)
+   Radius 62px, angles: -65° -22° +22° +65° */
+.btn-arc-0 { top: 42px;  left: 16px;  }  /* -65° */
+.btn-arc-1 { top:  8px;  left: 52px;  }  /* -22° */
+.btn-arc-2 { top:  8px;  left: 92px;  }  /* +22° */
+.btn-arc-3 { top: 42px;  left: 128px; }  /* +65° */
 
-/* Timer pill */
+/* Staggered pop-in when controls appear */
+.controls.show .btn {
+  animation: btn-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.controls.show .btn-arc-0 { animation-delay:  0ms; }
+.controls.show .btn-arc-1 { animation-delay: 35ms; }
+.controls.show .btn-arc-2 { animation-delay: 65ms; }
+.controls.show .btn-arc-3 { animation-delay: 95ms; }
+
+@keyframes btn-pop {
+  from { transform: scale(0.4) translateY(6px); opacity: 0; }
+  to   { transform: scale(1)   translateY(0);   opacity: 1; }
+}
+
+/* Per-button accent colours on hover glow */
+.btn-rec:hover     { box-shadow: 0 6px 20px rgba(220,38,38,0.45),  0 2px 6px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.14); }
+.btn-pause:hover   { box-shadow: 0 6px 20px rgba(217,119,6,0.45),  0 2px 6px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.14); }
+.btn-stop:hover    { box-shadow: 0 6px 20px rgba(100,116,139,0.45),0 2px 6px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.14); }
+.btn-consent:hover { box-shadow: 0 6px 20px rgba(14,165,233,0.45), 0 2px 6px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.14); }
+.btn-db:hover      { box-shadow: 0 6px 20px rgba(139,92,246,0.5),  0 2px 6px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.14); }
+
+.btn-rec     { color: #f87171; }
+.btn-pause   { color: #fbbf24; }
+.btn-stop    { color: #cbd5e1; }
+.btn-consent { color: #38bdf8; }
+.btn-db      { color: #c084fc; }
+
+/* ─────────────────────────────────────────────
+   TIMER PILL
+───────────────────────────────────────────── */
 .timer {
   position: absolute;
-  top: 66px;
+  top: -84px;
   left: 50%;
-  transform: translateX(-30%);
-  background: rgba(0, 0, 0, 0.78);
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.80);
   color: #A8FFD0;
   padding: 3px 10px;
   border-radius: 999px;
@@ -195,4 +241,166 @@ html, body, #root {
   letter-spacing: 0.5px;
   border: 1px solid rgba(168, 255, 208, 0.25);
   z-index: 11;
+  white-space: nowrap;
 }
+
+/* ─────────────────────────────────────────────
+   UPLOAD STATUS PILL
+───────────────────────────────────────────── */
+.upload-bar {
+  position: absolute;
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  z-index: 12;
+  pointer-events: none;
+  animation: fadein 0.3s ease;
+}
+/* All "in-progress" stages share the same dark pill style */
+.upload-bar.uploading,
+.upload-bar.transcribing,
+.upload-bar.analyzing,
+.upload-bar.saving {
+  background: rgba(0,0,0,0.82);
+  color: #A8FFD0;
+  border: 1px solid rgba(168,255,208,0.28);
+}
+/* Pulse dot animation on active stages */
+.upload-bar.uploading::before,
+.upload-bar.transcribing::before,
+.upload-bar.analyzing::before,
+.upload-bar.saving::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #34d399;
+  margin-right: 5px;
+  vertical-align: middle;
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.3; transform: scale(0.7); }
+}
+.upload-bar.success {
+  background: #10b981;
+  color: white;
+  box-shadow: 0 2px 8px rgba(16,185,129,0.35);
+}
+.upload-bar.error {
+  background: #ef4444;
+  color: white;
+}
+@keyframes fadein {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ─────────────────────────────────────────────
+   OPPORTUNITY ID MODAL
+───────────────────────────────────────────── */
+.opp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.58);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  animation: overlay-in 0.2s ease;
+}
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.opp-card {
+  background: #fff;
+  border-radius: 18px;
+  padding: 22px 20px 18px;
+  width: 224px;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.28),
+    0 2px 8px rgba(0,0,0,0.12);
+  animation: card-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes card-in {
+  from { transform: scale(0.88) translateY(8px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);   opacity: 1; }
+}
+
+.opp-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+  font-family: system-ui, sans-serif;
+}
+.opp-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 12px;
+  font-family: system-ui, sans-serif;
+}
+.opp-input {
+  width: 100%;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  margin-bottom: 14px;
+  font-family: system-ui, sans-serif;
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+.opp-input:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+}
+.opp-input::placeholder { color: #cbd5e1; }
+
+.opp-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.btn-opp-cancel {
+  background: #f1f5f9;
+  color: #64748b;
+  border: none;
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+  transition: background 0.12s;
+}
+.btn-opp-cancel:hover { background: #e2e8f0; }
+.btn-opp-submit {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+  transition: background 0.12s;
+  box-shadow: 0 2px 6px rgba(16,185,129,0.3);
+}
+.btn-opp-submit:hover    { background: #059669; }
+.btn-opp-submit:disabled { opacity: 0.45; cursor: default; box-shadow: none; }

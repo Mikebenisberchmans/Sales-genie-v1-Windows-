@@ -5,3 +5,5 @@ src-tauri/target/
 src-tauri/gen/
 *.log
 .env
+.env.*
+.claude/
