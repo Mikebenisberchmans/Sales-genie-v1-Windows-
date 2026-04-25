@@ -47,6 +47,26 @@ sys.wav   ──┘   STT server  (merged, time-ordered)        sentiment_score,
 
 ---
 
+## Two ways to use it
+
+### Option 1 — Download the installer (easiest)
+
+Download the latest `.msi` or `.exe` installer from the [Releases](https://github.com/Mikebenisberchmans/Sales-genie-v1-Windows-/releases) page and run it.
+
+The installer includes:
+- The Genie Recorder app
+- The **bundled STT server** (Whisper, no Python installation needed)
+
+After installing, you only need to set up the Modal cloud inference endpoint once — the STT transcription runs entirely from the bundled binary.
+
+> Jump straight to **[Step 2 — Get the model](#step-2--get-the-model)** below.
+
+### Option 2 — Build from source (for developers)
+
+Follow all steps below.
+
+---
+
 ## Complete setup guide
 
 ### Prerequisites
@@ -55,14 +75,14 @@ sys.wav   ──┘   STT server  (merged, time-ordered)        sentiment_score,
 |---|---|
 | Rust + Cargo | https://rustup.rs |
 | Node.js 18+ | https://nodejs.org |
-| Python 3.10 or 3.11 | https://python.org |
+| Python 3.10 or 3.11 | https://python.org *(only needed in dev mode — not required for the installer)* |
 | Git | https://git-scm.com |
 | **Windows only:** Microsoft C++ Build Tools | https://aka.ms/vs/17/release/vs_buildtools.exe |
 | **Windows only:** WebView2 | Pre-installed on Windows 11; https://developer.microsoft.com/en-us/microsoft-edge/webview2 for Windows 10 |
 
 ---
 
-### Step 1 — Clone the app
+### Step 1 — Clone and install
 
 ```bash
 git clone https://github.com/Mikebenisberchmans/Sales-genie-v1-Windows-.git
@@ -72,40 +92,41 @@ npm install
 
 ---
 
-### Step 2 — Set up the Python venv (for AI features)
-
-```bash
-cd server
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# macOS / Linux
-source .venv/bin/activate
-```
-
-Install dependencies for the STT server (always needed):
-```bash
-pip install -r requirements-stt.txt
-```
-
----
-
-### Step 3 — Get the model
+### Step 2 — Get the model
 
 The fine-tuned Phi-4 model is hosted on HuggingFace:
 **https://huggingface.co/Mike-Benis/Salenie-Phi4-v1**
 
 You have two options for inference:
 
-#### Option A — Modal (recommended, no GPU required)
+#### Option A — Modal cloud (recommended, no GPU required)
 
 Modal runs the model on an A10G cloud GPU. ~$0.001 per call. Setup takes 5 minutes.
 
+**One-click wizard (Windows):** Run this from PowerShell — it installs everything, authenticates Modal, creates secrets, deploys the endpoint, and writes your config automatically:
+
+```powershell
+cd server
+powershell -ExecutionPolicy Bypass -File setup-modal.ps1
+```
+
+The wizard will:
+1. Create a Python venv and install Modal
+2. Open your browser to log in to Modal
+3. Prompt for your HuggingFace token and chosen API token
+4. Deploy `modal_serve.py` to Modal
+5. Write the endpoint URL + token directly into the app config
+
+**Manual setup:**
+
 ```bash
+cd server
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
+
 pip install -r requirements-modal.txt
-modal setup                      # opens browser to log in / sign up
+modal setup                     # opens browser to log in / sign up
 ```
 
 Create your Modal secrets (HF token + API token):
@@ -122,7 +143,7 @@ Deploy the endpoint:
 modal deploy modal_serve.py
 ```
 
-Copy the URL that ends in `--salenie-generate.modal.run` — you'll need it in Step 5.
+Copy the URL ending in `--salenie-generate.modal.run` — you'll need it in Step 5.
 
 Test it works:
 ```bash
@@ -133,6 +154,10 @@ modal run modal_serve.py
 #### Option B — Local GPU (requires 8 GB+ VRAM)
 
 ```bash
+cd server
+python -m venv .venv
+.venv\Scripts\activate
+
 pip install -r requirements-local.txt
 
 # Download model weights (~14 GB):
@@ -146,19 +171,49 @@ python local_serve.py
 
 ---
 
-### Step 4 — Run the Genie Recorder app
+### Step 3 — Set up the STT server
+
+> **Installer users: skip this step.** The STT server is bundled and auto-starts with the app.
+
+In dev mode (`npm run tauri dev`), the bundled sidecar is not used — you must run the STT server manually.
 
 ```bash
-# From the repo root:
+cd server
+# Activate the same venv you created in Step 2
+.venv\Scripts\activate
+
+pip install -r requirements-stt.txt
+python stt_server.py
+# Wait for: INFO: Uvicorn running on http://0.0.0.0:8765
+```
+
+Keep this terminal open while using the app in dev mode.
+
+To build the real bundled sidecar for production (required before `npm run tauri build`):
+```bash
+cd server
+powershell -ExecutionPolicy Bypass -File build_sidecar.ps1
+```
+
+This runs PyInstaller and copies the output to `src-tauri/resources/stt_server/` so the Tauri bundler picks it up.
+
+---
+
+### Step 4 — Run the app
+
+**Dev mode:**
+```bash
+# From the repo root (with STT server already running in another terminal):
 npm run tauri dev
 ```
 
 > **First build takes 5–10 minutes** — Cargo is compiling ~200 crates. Every build after that is seconds.
 
-For a production installer (`.msi` + `.exe`):
+**Production installer:**
 ```bash
 npm run tauri build
 # Output: src-tauri/target/release/bundle/
+# .msi and .exe installers will be in that folder
 ```
 
 ---
@@ -166,6 +221,8 @@ npm run tauri build
 ### Step 5 — Configure the app
 
 Click the **⬡ database icon** in the arc controls (hover over the genie to reveal). The config ledger opens in a separate window.
+
+> **If you used `setup-modal.ps1`**, the AI Analysis tab is already pre-filled — you can skip straight to the Salesperson tab.
 
 #### Tab 1 — Salesperson
 Enter your name and employee ID. These are stamped on every warehouse row.
@@ -185,19 +242,19 @@ Choose your data warehouse. See [Warehouse DDL](#warehouse-ddl) below to create 
 Skip this tab if you don't need automatic data insertion.
 
 #### Tab 4 — AI Analysis
+
 | Setting | Value |
 |---|---|
 | Toggle | **On** |
 | Inference Endpoint | `https://YOUR-ORG--salenie-generate.modal.run YOUR-API-TOKEN` *(Modal)* or `http://localhost:8766` *(local)* |
-| Whisper Model | `base` *(recommended)* |
+| Whisper Model | `base` *(recommended — fastest, good accuracy)* |
 | STT Port | `8765` |
-| Python Path | Full path to `python.exe` inside your `server/.venv` |
-| STT Script | Full path to `server/stt_server.py` |
 
 > **Inference Endpoint format:** URL and API token separated by a single space.
-> The Genie Recorder app splits on the space to set the Bearer token header automatically.
+> The app splits on the space to set the Bearer token header automatically.
+> For local inference, just enter the URL with no token.
 
-Click **Test Services** → waits up to 15 s for Whisper to load → shows green/red dots.
+Click **Test Services** → the app auto-spawns the bundled STT server (installer) or checks the one you started manually (dev mode), then waits up to 15 s for Whisper to load. Both dots should turn green.
 
 ---
 
@@ -215,6 +272,9 @@ Sales-genie-v1-Windows-/
 │   ├── modal_serve.py                Modal cloud inference (Phi-4 on A10G)
 │   ├── local_serve.py                Local GPU inference alternative
 │   ├── stt_server.py                 Whisper speech-to-text server
+│   ├── setup-modal.ps1               One-click Modal setup wizard (Windows)
+│   ├── build_sidecar.ps1             Builds stt_server.exe via PyInstaller
+│   ├── stt_server.spec               PyInstaller spec (onedir mode)
 │   ├── requirements-modal.txt        Deps for Modal deployment
 │   ├── requirements-stt.txt          Deps for STT server
 │   ├── requirements-local.txt        Deps for local GPU inference
@@ -225,7 +285,6 @@ Sales-genie-v1-Windows-/
 │   ├── styles.css                    GPU-composited CSS animations
 │   ├── ledger.jsx                    Config ledger React entry point
 │   ├── ledger.css                    Dark-themed ledger styles
-│   ├── sounds.js                     TTS disclaimer + UI sounds
 │   └── components/
 │       ├── Genie.jsx                 Chibi SVG genie (animated layers)
 │       ├── OppModal.jsx              Opportunity ID modal on stop
@@ -233,10 +292,12 @@ Sales-genie-v1-Windows-/
 │
 └── src-tauri/                        ← Rust backend
     ├── Cargo.toml
-    ├── tauri.conf.json               Window definitions
-    ├── capabilities/default.json     Tauri permissions
+    ├── tauri.conf.json               Window definitions + bundle resources
+    ├── resources/
+    │   └── stt_server/               Bundled STT sidecar (built by build_sidecar.ps1)
+    │       └── stt_server.exe        PyInstaller onedir exe (auto-starts at launch)
     └── src/
-        ├── main.rs                   Tauri entrypoint + app lifecycle
+        ├── main.rs                   Tauri entrypoint + auto-spawns STT server
         ├── recorder.rs               cpal dual-track WAV recording (WASAPI loopback)
         ├── commands.rs               All Tauri commands exposed to frontend
         ├── config.rs                 Read/write config.json in OS app-data dir
@@ -253,12 +314,26 @@ Sales-genie-v1-Windows-/
 | Track | Source | Mechanism |
 |---|---|---|
 | Mic | Default input device | `cpal::build_input_stream` on `default_input_device()` |
-| System audio | Default output device | `cpal::build_input_stream` on loopback |
+| System audio | Default output device | `cpal::build_input_stream` on WASAPI loopback |
 
 On **Windows**, WASAPI natively supports loopback on the default output device — no virtual driver needed.
 On **macOS**, install [BlackHole](https://github.com/ExistentialAudio/BlackHole).
 
 Both streams write to separate WAV files via the `hound` crate. Stopping recording drops both streams (flushes WAV headers) before the upload pipeline starts.
+
+---
+
+## How the bundled STT server works
+
+When you install Genie Recorder via the `.msi`/`.exe` installer, the Whisper transcription server is bundled as a self-contained Windows executable built with **PyInstaller**. No Python installation is needed on the end-user machine.
+
+On startup:
+1. The app reads your config (`%APPDATA%\com.demo.genierecorder\config.json`)
+2. If AI Analysis is enabled, it auto-spawns `stt_server.exe` from the bundled resources directory
+3. The exe loads the Whisper model and starts accepting requests on port 8765
+4. On app exit, the subprocess is killed cleanly
+
+The bundled exe is built from `server/stt_server.py` using the PyInstaller spec at `server/stt_server.spec`. Run `server/build_sidecar.ps1` to (re)build it before producing a production installer.
 
 ---
 
@@ -385,7 +460,8 @@ Every animated element has `will-change: transform`, `backface-visibility: hidde
 - **Pause is UI-only** — cpal streams keep writing samples during pause. Future: drop + re-create streams on resume.
 - **macOS loopback** — requires [BlackHole](https://github.com/ExistentialAudio/BlackHole) virtual audio driver.
 - **Modal cold start** — containers spin down after ~2 min of inactivity. First inference after idle takes ~15–20 s to warm up; subsequent calls are ~5 s.
-- **Whisper first run** — downloads the model on first use (~74 MB for `base`, ~460 MB for `medium`).
+- **Whisper first run (dev mode)** — downloads the Whisper model on first use (~74 MB for `base`, ~460 MB for `medium`). In the installer build the model is downloaded to the OS cache on first launch.
+- **STT server in dev mode** — must be started manually (`python server/stt_server.py`). The bundled sidecar is only active in the production installer build.
 
 ---
 
