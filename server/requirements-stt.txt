@@ -1,0 +1,5 @@
+# Requirements for the local Whisper STT server (stt_server.py)
+# Install with:  pip install -r requirements-stt.txt
+faster-whisper>=1.0.0
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0

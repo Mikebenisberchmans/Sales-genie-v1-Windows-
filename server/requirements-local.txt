@@ -1,0 +1,11 @@
+# Requirements for running the model locally (local_serve.py)
+# Requires an NVIDIA GPU with 8 GB+ VRAM and CUDA 12.1+
+# Install with:  pip install -r requirements-local.txt
+torch>=2.4.0
+transformers==4.53.3
+accelerate>=0.30.0
+bitsandbytes>=0.43.0
+huggingface_hub>=0.21.0
+safetensors
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0

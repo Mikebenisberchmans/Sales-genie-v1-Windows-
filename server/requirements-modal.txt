@@ -1,0 +1,3 @@
+# Requirements for deploying the Modal inference endpoint
+# Install with:  pip install -r requirements-modal.txt
+modal>=1.0.0
