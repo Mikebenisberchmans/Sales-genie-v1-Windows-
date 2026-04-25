@@ -20,13 +20,9 @@ const DEFAULT_CFG = {
   },
   analysis: {
     enabled: false,
-    inferenceEndpoint: "http://localhost:8766",
+    inferenceEndpoint: "",
     whisperModel: "base",
     sttPort: 8765,
-    pythonPath: "",
-    scriptPath: "",
-    inferenceScriptPath: "",
-    modelPath: "",
   },
 };
 
@@ -533,7 +529,7 @@ export default function ConfigLedger() {
             <div className="toggle-row">
               <div>
                 <div className="toggle-label">AI Transcription & Analysis</div>
-                <div className="toggle-desc">Whisper STT + Phi-4 fine-tuned model via Modal</div>
+                <div className="toggle-desc">Whisper STT (bundled) + Phi-4 on Modal cloud</div>
               </div>
               <button
                 className={`toggle-switch ${cfg.analysis.enabled ? "on" : ""}`}
@@ -541,13 +537,36 @@ export default function ConfigLedger() {
               />
             </div>
 
+            {/* First-time setup callout */}
+            {cfg.analysis.enabled && !cfg.analysis.inferenceEndpoint && (
+              <div style={{
+                background: "rgba(16,185,129,0.08)",
+                border: "1px solid rgba(16,185,129,0.2)",
+                borderRadius: 12,
+                padding: "14px 16px",
+                marginBottom: 12,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#34d399", marginBottom: 6 }}>
+                  🚀 First-time setup
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
+                  Run <span style={{ fontFamily: "monospace", color: "#a5f3fc" }}>server\setup-modal.ps1</span> (right-click → Run with PowerShell) to automatically create
+                  your Modal account, deploy the model, and fill in the endpoint below.
+                  Or paste your endpoint manually if you already have one.
+                </div>
+              </div>
+            )}
+
             {cfg.analysis.enabled && (
               <div className="provider-fields">
-                <Field label="Inference Endpoint" hint="Modal URL + token: https://org--salenie-generate.modal.run your-token">
+                <Field
+                  label="Inference Endpoint"
+                  hint="Modal URL + API token separated by a space:  https://org--salenie-generate.modal.run  your-token"
+                >
                   <input
                     value={cfg.analysis.inferenceEndpoint}
                     onChange={e => set("analysis.inferenceEndpoint", e.target.value)}
-                    placeholder="https://mikebenisberchmans--salenie-generate.modal.run TOKEN"
+                    placeholder="https://yourorg--salenie-generate.modal.run  your-api-token"
                   />
                 </Field>
                 <div className="field-row">
@@ -559,24 +578,19 @@ export default function ConfigLedger() {
                       <option value="medium">Medium (best)</option>
                     </select>
                   </Field>
-                  <Field label="STT Port">
-                    <input type="number" value={cfg.analysis.sttPort} onChange={e => set("analysis.sttPort", Number(e.target.value))} placeholder="8765" />
+                  <Field label="STT Port" hint="Default: 8765">
+                    <input
+                      type="number"
+                      value={cfg.analysis.sttPort}
+                      onChange={e => set("analysis.sttPort", Number(e.target.value))}
+                      placeholder="8765"
+                    />
                   </Field>
                 </div>
-                <Field label="Python Executable" hint="Path to Python in your model venv">
-                  <input
-                    value={cfg.analysis.pythonPath}
-                    onChange={e => set("analysis.pythonPath", e.target.value)}
-                    placeholder="C:\Users\...\phi_sales_model\.venv\Scripts\python.exe"
-                  />
-                </Field>
-                <Field label="STT Server Script" hint="Path to salenie_stt_server.py">
-                  <input
-                    value={cfg.analysis.scriptPath}
-                    onChange={e => set("analysis.scriptPath", e.target.value)}
-                    placeholder="C:\Users\...\phi_sales_model\salenie_stt_server.py"
-                  />
-                </Field>
+                <div style={{ fontSize: 10, color: "#475569", marginBottom: 12, lineHeight: 1.5 }}>
+                  💡 The Whisper speech-to-text server is bundled inside the app — no Python required.
+                  It starts automatically when AI Analysis is enabled.
+                </div>
                 <ServiceStatusRow config={cfg} />
               </div>
             )}

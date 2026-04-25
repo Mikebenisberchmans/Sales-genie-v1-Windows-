@@ -1,4 +1,4 @@
-node_modules/
+﻿node_modules/
 dist/
 .vite/
 src-tauri/target/
@@ -7,3 +7,16 @@ src-tauri/gen/
 .env
 .env.*
 .claude/
+
+# Bundled sidecar — built by server/build_sidecar.ps1
+# The stt_server/ directory is checked in as a placeholder (stub exe).
+# The real PyInstaller build replaces it before 
+pm run tauri build.
+src-tauri/resources/stt_server/stt_server.exe
+
+# Python venv inside server/
+server/.venv/
+server/__pycache__/
+server/build/
+server/dist/
+server/*.spec.bak

@@ -1,7 +1,12 @@
-/// Manages the salenie_stt_server.py subprocess and calls its /transcribe endpoint.
+/// Manages the bundled stt_server sidecar and calls its /transcribe endpoint.
+///
+/// The STT server is a self-contained executable bundled inside the Tauri
+/// installer (built from server/stt_server.py via PyInstaller). No Python
+/// installation is required on the end-user's machine.
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -13,22 +18,33 @@ static STT_PROCESS: Lazy<Mutex<Option<Child>>> = Lazy::new(|| Mutex::new(None));
 // Process management
 // ---------------------------------------------------------------------------
 
-/// Spawn the Python STT server if it isn't already running.
-pub fn spawn_stt_server(python_path: &str, script_path: &str, model_size: &str, port: u16) {
+/// Spawn the bundled STT server if it isn't already running.
+///
+/// `exe_path` is the full path to stt_server.exe as resolved by Tauri's
+/// resource resolver at runtime.
+pub fn spawn_stt_server(exe_path: &str, model_size: &str, port: u16) {
     let mut guard = STT_PROCESS.lock().unwrap();
     if guard.is_some() {
         return; // already running
     }
 
+    if exe_path.is_empty() {
+        eprintln!("[transcriber] stt_server.exe path is empty — STT server not started.");
+        return;
+    }
+
+    // On Windows the sidecar is a folder (PyInstaller onedir mode).
+    // The actual exe lives inside: stt_server/stt_server.exe
+    let exe = resolve_exe(exe_path);
+
     eprintln!(
-        "[transcriber] Spawning STT server: {} {} (whisper={}, port={})",
-        python_path, script_path, model_size, port
+        "[transcriber] Spawning STT server: {} (whisper={}, port={})",
+        exe.display(), model_size, port
     );
 
-    let mut cmd = Command::new(python_path);
-    cmd.arg(script_path)
-        .env("WHISPER_MODEL", model_size)
-        .env("STT_PORT", port.to_string());
+    let mut cmd = Command::new(&exe);
+    cmd.env("WHISPER_MODEL", model_size)
+       .env("STT_PORT", port.to_string());
 
     // Suppress the console window on Windows
     #[cfg(target_os = "windows")]
@@ -44,8 +60,34 @@ pub fn spawn_stt_server(python_path: &str, script_path: &str, model_size: &str, 
         }
         Err(e) => {
             eprintln!("[transcriber] Failed to spawn STT server: {e}");
+            eprintln!("[transcriber] Exe path was: {}", exe.display());
         }
     }
+}
+
+/// Resolve the actual executable path from the resource directory.
+/// PyInstaller onedir mode creates stt_server/stt_server.exe on Windows.
+fn resolve_exe(resource_path: &str) -> PathBuf {
+    let p = PathBuf::from(resource_path);
+
+    // If the resource is already a .exe, use it directly
+    if p.extension().map(|e| e == "exe").unwrap_or(false) && p.exists() {
+        return p;
+    }
+
+    // onedir: resource is a folder, exe is inside it
+    let inner = p.join("stt_server.exe");
+    if inner.exists() {
+        return inner;
+    }
+
+    // Fallback — return as-is (Linux/macOS: no .exe extension)
+    let no_ext = p.join("stt_server");
+    if no_ext.exists() {
+        return no_ext;
+    }
+
+    p
 }
 
 /// Kill the STT server subprocess (called on app exit).
@@ -88,7 +130,7 @@ pub async fn wait_for_stt_ready(port: u16) -> bool {
     false
 }
 
-/// Quick check — is the server currently accepting requests?
+/// Quick single-shot health check — is the server currently accepting requests?
 pub async fn check_stt_ready(port: u16) -> bool {
     let client = Client::builder()
         .timeout(Duration::from_secs(3))
@@ -112,11 +154,7 @@ pub async fn check_stt_ready(port: u16) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Transcribe mic + system WAVs into a merged speaker-labelled transcript.
-pub async fn transcribe(
-    mic_path: &str,
-    sys_path: &str,
-    port: u16,
-) -> Result<String, String> {
+pub async fn transcribe(mic_path: &str, sys_path: &str, port: u16) -> Result<String, String> {
     let client = Client::builder()
         .timeout(Duration::from_secs(600)) // 10-min ceiling for long recordings
         .build()
@@ -139,7 +177,7 @@ pub async fn transcribe(
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
+        let text   = resp.text().await.unwrap_or_default();
         return Err(format!("STT server error {status}: {text}"));
     }
 
@@ -153,4 +191,3 @@ pub async fn transcribe(
         .map(|s| s.to_string())
         .ok_or_else(|| "No transcript in STT response".to_string())
 }
-
