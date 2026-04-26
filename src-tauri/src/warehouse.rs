@@ -338,14 +338,17 @@ async fn insert_redshift(metadata: &Value, cfg: &Value) -> Result<(), String> {
 // Public dispatcher
 // ---------------------------------------------------------------------------
 pub async fn insert(metadata: &Value, warehouse_config: &Value) -> Result<(), String> {
+    // warehouse_config is config.warehouse, which has shape:
+    //   { "provider": "snowflake", "snowflake": { "account": ..., ... }, "bigquery": { ... }, ... }
+    // Each insert_* fn receives only the nested provider-specific object.
     let provider = warehouse_config["provider"].as_str().unwrap_or("none");
     match provider {
-        "snowflake" => insert_snowflake(metadata, warehouse_config).await,
-        "bigquery" => insert_bigquery(metadata, warehouse_config).await,
-        "clickhouse" => insert_clickhouse(metadata, warehouse_config).await,
-        "databricks" => insert_databricks(metadata, warehouse_config).await,
-        "redshift" => insert_redshift(metadata, warehouse_config).await,
-        "none" | "" => Ok(()),
+        "snowflake"  => insert_snowflake(metadata,  &warehouse_config["snowflake"]).await,
+        "bigquery"   => insert_bigquery(metadata,   &warehouse_config["bigquery"]).await,
+        "clickhouse" => insert_clickhouse(metadata, &warehouse_config["clickhouse"]).await,
+        "databricks" => insert_databricks(metadata, &warehouse_config["databricks"]).await,
+        "redshift"   => insert_redshift(metadata,   &warehouse_config["redshift"]).await,
+        "none" | ""  => Ok(()),
         other => Err(format!("Unknown warehouse provider: {other}")),
     }
 }
