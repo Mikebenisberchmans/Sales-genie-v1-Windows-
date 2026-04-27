@@ -17,20 +17,35 @@ fn hmac_sign(key: &[u8], msg: &str) -> Vec<u8> {
 // Snowflake — SQL API v2
 // ---------------------------------------------------------------------------
 async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
-    let client = Client::new();
-    let account = cfg["account"].as_str().unwrap_or("");
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap_or_else(|_| Client::new());
+
+    let account  = cfg["account"].as_str().unwrap_or("");
     let username = cfg["username"].as_str().unwrap_or("");
     let password = cfg["password"].as_str().unwrap_or("");
     let database = cfg["database"].as_str().unwrap_or("");
-    let schema = cfg["schema"].as_str().unwrap_or("");
+    let schema   = cfg["schema"].as_str().unwrap_or("");
     let warehouse = cfg["warehouse"].as_str().unwrap_or("");
-    let table = cfg["table"].as_str().unwrap_or("genie_recordings");
+    let table    = cfg["table"].as_str().unwrap_or("genie_recordings");
+
+    if account.is_empty() || username.is_empty() {
+        return Err("Snowflake account or username not configured".into());
+    }
 
     let url = format!("https://{account}.snowflakecomputing.com/api/v2/statements");
     let creds = STANDARD.encode(format!("{username}:{password}"));
 
+    // Helper: pull a Value as a plain string for Snowflake bindings.
+    // serde_json::Value::to_string() adds extra quotes for string variants,
+    // so we use as_str() when available and fall back to to_string() for numbers.
+    fn bind_str(v: &Value) -> String {
+        v.as_str().map(|s| s.to_string()).unwrap_or_else(|| v.to_string())
+    }
+
     let stmt = format!(
-        "INSERT INTO {database}.{schema}.{table} \
+        "INSERT INTO \"{database}\".\"{schema}\".\"{table}\" \
          (opp_id, submission_date, duration_seconds, salesperson_name, salesperson_id, \
           mic_url, sys_url, mic_local_path, sys_local_path, sample_rate, channels) \
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -38,34 +53,42 @@ async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
 
     let body = json!({
         "statement": stmt,
+        "timeout":   60,
+        "database":  database,
+        "schema":    schema,
         "warehouse": warehouse,
         "bindings": {
-            "1":  { "type": "TEXT",    "value": metadata["opp_id"] },
-            "2":  { "type": "TEXT",    "value": metadata["submission_date"] },
-            "3":  { "type": "FIXED",   "value": metadata["duration_seconds"].to_string() },
-            "4":  { "type": "TEXT",    "value": metadata["salesperson_name"] },
-            "5":  { "type": "TEXT",    "value": metadata["salesperson_id"] },
-            "6":  { "type": "TEXT",    "value": metadata["mic_url"] },
-            "7":  { "type": "TEXT",    "value": metadata["sys_url"] },
-            "8":  { "type": "TEXT",    "value": metadata["mic_local_path"] },
-            "9":  { "type": "TEXT",    "value": metadata["sys_local_path"] },
-            "10": { "type": "FIXED",   "value": metadata["sample_rate"].to_string() },
-            "11": { "type": "FIXED",   "value": metadata["channels"].to_string() }
+            "1":  { "type": "TEXT",  "value": bind_str(&metadata["opp_id"]) },
+            "2":  { "type": "TEXT",  "value": bind_str(&metadata["submission_date"]) },
+            "3":  { "type": "FIXED", "value": bind_str(&metadata["duration_seconds"]) },
+            "4":  { "type": "TEXT",  "value": bind_str(&metadata["salesperson_name"]) },
+            "5":  { "type": "TEXT",  "value": bind_str(&metadata["salesperson_id"]) },
+            "6":  { "type": "TEXT",  "value": bind_str(&metadata["mic_url"]) },
+            "7":  { "type": "TEXT",  "value": bind_str(&metadata["sys_url"]) },
+            "8":  { "type": "TEXT",  "value": bind_str(&metadata["mic_local_path"]) },
+            "9":  { "type": "TEXT",  "value": bind_str(&metadata["sys_local_path"]) },
+            "10": { "type": "FIXED", "value": bind_str(&metadata["sample_rate"]) },
+            "11": { "type": "FIXED", "value": bind_str(&metadata["channels"]) }
         }
     });
 
-    client
+    let resp = client
         .post(&url)
-        .header("authorization", format!("Basic {creds}"))
-        .header("content-type", "application/json")
-        .header("accept", "application/json")
+        .header("authorization",                       format!("Basic {creds}"))
+        .header("content-type",                        "application/json")
+        .header("accept",                              "application/json")
         .header("X-Snowflake-Authorization-Token-Type", "BASIC")
         .json(&body)
         .send()
         .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Snowflake request failed: {e}"))?;
+
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(format!("Snowflake {status}: {text}"));
+    }
 
     Ok(())
 }

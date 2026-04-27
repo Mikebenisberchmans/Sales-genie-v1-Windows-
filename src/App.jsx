@@ -152,30 +152,38 @@ export default function App() {
             : [];
         const summary = a.action ?? a.ai_summary ?? a.summary ?? "";
 
-        await invoke("save_to_warehouse", {
-          metadata: {
-            opp_id:             oppId,
-            submission_date:    new Date().toISOString(),
-            duration_seconds:   duration,
-            salesperson_name:   config?.salesperson?.name  ?? "",
-            salesperson_id:     config?.salesperson?.id    ?? "",
-            mic_url:            micUrl  ?? "",
-            sys_url:            sysUrl  ?? "",
-            mic_local_path:     mic_path,
-            sys_local_path:     sys_path,
-            sample_rate:        44100,
-            channels:           1,
-            transcript_text:    transcript,
-            ai_summary:         summary,
-            deal_amount:        a.deal_size        ?? a.deal_amount  ?? 0,
-            deal_company:       a.recommended_forecast_category ?? a.deal_company ?? "",
-            deal_stage:         a.action           ?? a.deal_stage  ?? "",
-            sentiment_score:    a.sentiment_score  ?? "",
-            next_steps:         JSON.stringify(nextStepsArr),
-            full_analysis_json: JSON.stringify(a),
-          },
-          warehouseConfig: config.warehouse,
-        }).catch((e) => console.warn("Warehouse save failed:", e));
+        try {
+          await invoke("save_to_warehouse", {
+            metadata: {
+              opp_id:             oppId,
+              submission_date:    new Date().toISOString(),
+              duration_seconds:   duration,
+              salesperson_name:   config?.salesperson?.name  ?? "",
+              salesperson_id:     config?.salesperson?.id    ?? "",
+              mic_url:            micUrl  ?? "",
+              sys_url:            sysUrl  ?? "",
+              mic_local_path:     mic_path,
+              sys_local_path:     sys_path,
+              sample_rate:        44100,
+              channels:           1,
+              transcript_text:    transcript,
+              ai_summary:         summary,
+              deal_amount:        a.deal_size        ?? a.deal_amount  ?? 0,
+              deal_company:       a.recommended_forecast_category ?? a.deal_company ?? "",
+              deal_stage:         a.action           ?? a.deal_stage  ?? "",
+              sentiment_score:    a.sentiment_score  ?? 0,
+              next_steps:         JSON.stringify(nextStepsArr),
+              full_analysis_json: JSON.stringify(a),
+            },
+            warehouseConfig: config.warehouse,
+          });
+        } catch (whErr) {
+          console.error("Warehouse save failed:", whErr);
+          await message(
+            `Warehouse insert failed:\n\n${whErr}`,
+            { title: "Snowflake Error", kind: "error" }
+          );
+        }
       }
 
       // ------------------------------------------------------------------
