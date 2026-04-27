@@ -1,4 +1,3 @@
-use base64::{engine::general_purpose::STANDARD, Engine};
 use hmac::{Hmac, Mac};
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -14,35 +13,100 @@ fn hmac_sign(key: &[u8], msg: &str) -> Vec<u8> {
 }
 
 // ---------------------------------------------------------------------------
-// Snowflake — SQL API v2
+// Snowflake — session-token auth + SQL API v2
+//
+// Basic auth (X-Snowflake-Authorization-Token-Type: BASIC) is blocked on
+// many newer Snowflake accounts (error 390146).  Instead we use the same
+// login flow as the official Python/Java connectors:
+//   1. POST /session/v1/login-request  →  get a short-lived session token
+//   2. POST /api/v2/statements          →  execute SQL with that token
 // ---------------------------------------------------------------------------
+
+/// Authenticate with Snowflake username + password and return a session token.
+async fn snowflake_login(
+    client: &Client,
+    account: &str,
+    username: &str,
+    password: &str,
+) -> Result<String, String> {
+    let url = format!(
+        "https://{account}.snowflakecomputing.com/session/v1/login-request\
+         ?warehouse=&databaseName=&schemaName=&roleName="
+    );
+
+    let body = json!({
+        "data": {
+            "CLIENT_APP_ID":      "GenieRecorder",
+            "CLIENT_APP_VERSION": "0.1.0",
+            "SVN_REVISION":       "1",
+            "ACCOUNT_NAME":       account.to_uppercase(),
+            "LOGIN_NAME":         username,
+            "PASSWORD":           password,
+            "CLIENT_ENVIRONMENT": {
+                "APPLICATION": "GenieRecorder",
+                "OS":          "Windows_NT",
+                "OS_VERSION":  "10.0"
+            }
+        }
+    });
+
+    let resp = client
+        .post(&url)
+        .header("user-agent", "GenieRecorder/0.1.0")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Snowflake login request failed: {e}"))?;
+
+    let status = resp.status();
+    let text   = resp.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(format!("Snowflake login {status}: {text}"));
+    }
+
+    let json: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Snowflake login parse error: {e}\nBody: {text}"))?;
+
+    if json["success"].as_bool() != Some(true) {
+        let msg = json["message"].as_str().unwrap_or("unknown login error");
+        return Err(format!("Snowflake login failed: {msg}"));
+    }
+
+    json["data"]["token"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("No session token in Snowflake login response: {text}"))
+}
+
 async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .unwrap_or_else(|_| Client::new());
 
-    let account  = cfg["account"].as_str().unwrap_or("");
-    let username = cfg["username"].as_str().unwrap_or("");
-    let password = cfg["password"].as_str().unwrap_or("");
-    let database = cfg["database"].as_str().unwrap_or("");
-    let schema   = cfg["schema"].as_str().unwrap_or("");
+    let account   = cfg["account"].as_str().unwrap_or("");
+    let username  = cfg["username"].as_str().unwrap_or("");
+    let password  = cfg["password"].as_str().unwrap_or("");
+    let database  = cfg["database"].as_str().unwrap_or("");
+    let schema    = cfg["schema"].as_str().unwrap_or("");
     let warehouse = cfg["warehouse"].as_str().unwrap_or("");
-    let table    = cfg["table"].as_str().unwrap_or("genie_recordings");
+    let table     = cfg["table"].as_str().unwrap_or("genie_recordings");
 
     if account.is_empty() || username.is_empty() {
         return Err("Snowflake account or username not configured".into());
     }
 
-    let url = format!("https://{account}.snowflakecomputing.com/api/v2/statements");
-    let creds = STANDARD.encode(format!("{username}:{password}"));
+    // Step 1 — get session token
+    let token = snowflake_login(&client, account, username, password).await?;
 
-    // Helper: pull a Value as a plain string for Snowflake bindings.
-    // serde_json::Value::to_string() adds extra quotes for string variants,
-    // so we use as_str() when available and fall back to to_string() for numbers.
+    // Helper: extract a plain string from a serde_json Value for bindings.
     fn bind_str(v: &Value) -> String {
         v.as_str().map(|s| s.to_string()).unwrap_or_else(|| v.to_string())
     }
+
+    // Step 2 — execute INSERT via SQL API v2
+    let url = format!("https://{account}.snowflakecomputing.com/api/v2/statements");
 
     let stmt = format!(
         "INSERT INTO \"{database}\".\"{schema}\".\"{table}\" \
@@ -74,18 +138,15 @@ async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
 
     let resp = client
         .post(&url)
-        .header("authorization",                       format!("Basic {creds}"))
-        .header("content-type",                        "application/json")
-        .header("accept",                              "application/json")
-        .header("user-agent",                          "GenieRecorder/0.1.0")
-        .header("X-Snowflake-Authorization-Token-Type", "BASIC")
+        .header("authorization", format!("Snowflake Token=\"{token}\""))
+        .header("user-agent",    "GenieRecorder/0.1.0")
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Snowflake request failed: {e}"))?;
+        .map_err(|e| format!("Snowflake SQL request failed: {e}"))?;
 
     let status = resp.status();
-    let text = resp.text().await.unwrap_or_default();
+    let text   = resp.text().await.unwrap_or_default();
 
     if !status.is_success() {
         return Err(format!("Snowflake {status}: {text}"));
