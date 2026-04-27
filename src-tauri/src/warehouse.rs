@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
+use chrono::Utc;
 
 type HmacSha256 = Hmac<sha2::Sha256>;
 
@@ -13,13 +14,17 @@ fn hmac_sign(key: &[u8], msg: &str) -> Vec<u8> {
 }
 
 // ---------------------------------------------------------------------------
-// Snowflake — session-token auth + SQL API v2
+// Snowflake — session-token auth + query REST API
 //
-// Basic auth (X-Snowflake-Authorization-Token-Type: BASIC) is blocked on
-// many newer Snowflake accounts (error 390146).  Instead we use the same
-// login flow as the official Python/Java connectors:
-//   1. POST /session/v1/login-request  →  get a short-lived session token
-//   2. POST /api/v2/statements          →  execute SQL with that token
+// The SQL API v2 (/api/v2/statements) only accepts OAuth Bearer or key-pair
+// JWT auth — it rejects the session-token "Snowflake Token=..." format with
+// error 390146.  The older query REST API (/queries/v1/query-request) fully
+// supports session tokens and is exactly what the official Python connector
+// uses under the hood.
+//
+// Flow:
+//   1. POST /session/v1/login-request   →  get a short-lived session token
+//   2. POST /queries/v1/query-request   →  execute INSERT with that token
 // ---------------------------------------------------------------------------
 
 /// Authenticate with Snowflake username + password and return a session token.
@@ -97,43 +102,55 @@ async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
         return Err("Snowflake account or username not configured".into());
     }
 
-    // Step 1 — get session token
+    // Step 1 — authenticate and get a session token
     let token = snowflake_login(&client, account, username, password).await?;
 
-    // Helper: extract a plain string from a serde_json Value for bindings.
-    fn bind_str(v: &Value) -> String {
-        v.as_str().map(|s| s.to_string()).unwrap_or_else(|| v.to_string())
+    // Step 2 — build INSERT SQL with properly escaped literal values.
+    // The query REST API does not support ? bindings, so we inline the values.
+    fn esc(v: &Value) -> String {
+        let s = v.as_str().map(|s| s.to_string()).unwrap_or_else(|| v.to_string());
+        // Escape single quotes by doubling them (standard SQL)
+        s.replace('\'', "''")
+    }
+    fn esc_num(v: &Value) -> String {
+        match v {
+            Value::Number(n) => n.to_string(),
+            Value::String(s) => s.clone(),
+            other => other.to_string(),
+        }
     }
 
-    // Step 2 — execute INSERT via SQL API v2
-    let url = format!("https://{account}.snowflakecomputing.com/api/v2/statements");
-
-    let stmt = format!(
+    let sql = format!(
         "INSERT INTO \"{database}\".\"{schema}\".\"{table}\" \
          (opp_id, submission_date, duration_seconds, salesperson_name, salesperson_id, \
           mic_url, sys_url, mic_local_path, sys_local_path, sample_rate, channels) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+         VALUES ('{}','{}',{},'{}','{}','{}','{}','{}','{}',{},{})",
+        esc(&metadata["opp_id"]),
+        esc(&metadata["submission_date"]),
+        esc_num(&metadata["duration_seconds"]),
+        esc(&metadata["salesperson_name"]),
+        esc(&metadata["salesperson_id"]),
+        esc(&metadata["mic_url"]),
+        esc(&metadata["sys_url"]),
+        esc(&metadata["mic_local_path"]),
+        esc(&metadata["sys_local_path"]),
+        esc_num(&metadata["sample_rate"]),
+        esc_num(&metadata["channels"]),
+    );
+
+    // Step 3 — POST to the query REST API (supports session-token auth)
+    let request_id = Uuid::new_v4();
+    let url = format!(
+        "https://{account}.snowflakecomputing.com/queries/v1/query-request\
+         ?requestId={request_id}&warehouse={warehouse}&databaseName={database}&schemaName={schema}"
     );
 
     let body = json!({
-        "statement": stmt,
-        "timeout":   60,
-        "database":  database,
-        "schema":    schema,
-        "warehouse": warehouse,
-        "bindings": {
-            "1":  { "type": "TEXT",  "value": bind_str(&metadata["opp_id"]) },
-            "2":  { "type": "TEXT",  "value": bind_str(&metadata["submission_date"]) },
-            "3":  { "type": "FIXED", "value": bind_str(&metadata["duration_seconds"]) },
-            "4":  { "type": "TEXT",  "value": bind_str(&metadata["salesperson_name"]) },
-            "5":  { "type": "TEXT",  "value": bind_str(&metadata["salesperson_id"]) },
-            "6":  { "type": "TEXT",  "value": bind_str(&metadata["mic_url"]) },
-            "7":  { "type": "TEXT",  "value": bind_str(&metadata["sys_url"]) },
-            "8":  { "type": "TEXT",  "value": bind_str(&metadata["mic_local_path"]) },
-            "9":  { "type": "TEXT",  "value": bind_str(&metadata["sys_local_path"]) },
-            "10": { "type": "FIXED", "value": bind_str(&metadata["sample_rate"]) },
-            "11": { "type": "FIXED", "value": bind_str(&metadata["channels"]) }
-        }
+        "sqlText":             sql,
+        "asyncExec":           false,
+        "sequenceId":          1,
+        "querySubmissionTime": Utc::now().timestamp_millis(),
+        "parameters": {}
     });
 
     let resp = client
@@ -143,13 +160,20 @@ async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Snowflake SQL request failed: {e}"))?;
+        .map_err(|e| format!("Snowflake query request failed: {e}"))?;
 
     let status = resp.status();
     let text   = resp.text().await.unwrap_or_default();
 
     if !status.is_success() {
-        return Err(format!("Snowflake {status}: {text}"));
+        return Err(format!("Snowflake query {status}: {text}"));
+    }
+
+    // The query API returns 200 even for SQL errors — check the payload
+    let json: Value = serde_json::from_str(&text).unwrap_or_default();
+    if json["success"].as_bool() == Some(false) {
+        let msg = json["message"].as_str().unwrap_or(&text);
+        return Err(format!("Snowflake SQL error: {msg}"));
     }
 
     Ok(())
