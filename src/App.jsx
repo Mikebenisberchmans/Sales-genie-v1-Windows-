@@ -105,10 +105,23 @@ export default function App() {
           });
           transcript   = aiResult.transcript   ?? "";
           analysisData = aiResult.analysis      ?? null;
-          setPipelineStage("analyzing"); // brief visual pause to show "analyzing" completed
+          setPipelineStage("analyzing");
           await _sleep(600);
         } catch (aiErr) {
-          console.warn("AI analysis failed, continuing without it:", aiErr);
+          // Show the real error so the user knows why AI fields will be empty
+          const errStr = String(aiErr);
+          let hint = "";
+          if (errStr.includes("Connection refused") || errStr.includes("STT request failed")) {
+            hint = "\n\nFix: Start the STT server first:\n  python server/stt_server.py";
+          } else if (errStr.includes("401") || errStr.includes("unauthorized")) {
+            hint = "\n\nFix: Check your API token in the AI Analysis config tab.";
+          } else if (errStr.includes("Model still loading") || errStr.includes("503")) {
+            hint = "\n\nFix: Modal container is cold-starting — wait 20 s and try again.";
+          }
+          await message(
+            `AI pipeline failed — recording is saved locally but transcript/analysis will be empty.\n\nError: ${errStr}${hint}`,
+            { title: "AI Analysis Failed", kind: "warning" }
+          );
           transcript   = "";
           analysisData = null;
         }
@@ -142,15 +155,26 @@ export default function App() {
       if (hasWarehouse) {
         setPipelineStage("saving");
 
-        // Extract fields from the model's actual output schema
+        // Extract fields matching the Salenie-Phi4-v1 output schema:
+        // { summary, deal_metadata: { company, industry, deal_size_estimate },
+        //   qualification_metrics: { ... }, sentiment_analysis: { lead_score, ... },
+        //   next_steps: { action_items: [...], recommended_forecast_category } }
         const a = analysisData ?? {};
-        // next_steps can be an object {action_items:[...]} or an array directly
-        const nextStepsArr = Array.isArray(a.next_steps)
-          ? a.next_steps
-          : Array.isArray(a.next_steps?.action_items)
-            ? a.next_steps.action_items
+
+        const summary     = a.summary ?? a.ai_summary ?? "";
+        const dealMeta    = a.deal_metadata ?? {};
+        const sentiment   = a.sentiment_analysis ?? {};
+        const nextStepsObj = a.next_steps ?? {};
+
+        const dealAmount  = dealMeta.deal_size_estimate ?? a.deal_size ?? a.deal_amount ?? 0;
+        const dealCompany = dealMeta.company ?? a.deal_company ?? "";
+        const dealStage   = nextStepsObj.recommended_forecast_category ?? a.deal_stage ?? "";
+        const sentScore   = sentiment.lead_score ?? a.sentiment_score ?? 0;
+        const nextStepsArr = Array.isArray(nextStepsObj.action_items)
+          ? nextStepsObj.action_items
+          : Array.isArray(a.next_steps)
+            ? a.next_steps
             : [];
-        const summary = a.action ?? a.ai_summary ?? a.summary ?? "";
 
         try {
           await invoke("save_to_warehouse", {
@@ -168,10 +192,10 @@ export default function App() {
               channels:           1,
               transcript_text:    transcript,
               ai_summary:         summary,
-              deal_amount:        a.deal_size        ?? a.deal_amount  ?? 0,
-              deal_company:       a.recommended_forecast_category ?? a.deal_company ?? "",
-              deal_stage:         a.action           ?? a.deal_stage  ?? "",
-              sentiment_score:    a.sentiment_score  ?? 0,
+              deal_amount:        dealAmount,
+              deal_company:       dealCompany,
+              deal_stage:         dealStage,
+              sentiment_score:    sentScore,
               next_steps:         JSON.stringify(nextStepsArr),
               full_analysis_json: JSON.stringify(a),
             },
