@@ -77,6 +77,7 @@ async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
         .header("authorization",                       format!("Basic {creds}"))
         .header("content-type",                        "application/json")
         .header("accept",                              "application/json")
+        .header("user-agent",                          "GenieRecorder/0.1.0")
         .header("X-Snowflake-Authorization-Token-Type", "BASIC")
         .json(&body)
         .send()
