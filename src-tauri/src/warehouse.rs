@@ -123,8 +123,11 @@ async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
     let sql = format!(
         "INSERT INTO \"{database}\".\"{schema}\".\"{table}\" \
          (opp_id, submission_date, duration_seconds, salesperson_name, salesperson_id, \
-          mic_url, sys_url, mic_local_path, sys_local_path, sample_rate, channels) \
-         VALUES ('{}','{}',{},'{}','{}','{}','{}','{}','{}',{},{})",
+          mic_url, sys_url, mic_local_path, sys_local_path, sample_rate, channels, \
+          transcript_text, ai_summary, deal_amount, deal_company, deal_stage, \
+          sentiment_score, next_steps, full_analysis_json) \
+         VALUES ('{}','{}',{},'{}','{}','{}','{}','{}','{}',{},{}, \
+                 '{}','{}',{},'{}','{}',{},'{}','{}')",
         esc(&metadata["opp_id"]),
         esc(&metadata["submission_date"]),
         esc_num(&metadata["duration_seconds"]),
@@ -136,6 +139,15 @@ async fn insert_snowflake(metadata: &Value, cfg: &Value) -> Result<(), String> {
         esc(&metadata["sys_local_path"]),
         esc_num(&metadata["sample_rate"]),
         esc_num(&metadata["channels"]),
+        // AI fields
+        esc(&metadata["transcript_text"]),
+        esc(&metadata["ai_summary"]),
+        esc_num(&metadata["deal_amount"]),
+        esc(&metadata["deal_company"]),
+        esc(&metadata["deal_stage"]),
+        esc_num(&metadata["sentiment_score"]),
+        esc(&metadata["next_steps"]),
+        esc(&metadata["full_analysis_json"]),
     );
 
     // Step 3 — POST to the query REST API (supports session-token auth)
