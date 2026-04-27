@@ -37,6 +37,28 @@ pub fn spawn_stt_server(exe_path: &str, model_size: &str, port: u16) {
     // The actual exe lives inside: stt_server/stt_server.exe
     let exe = resolve_exe(exe_path);
 
+    // Guard against the placeholder stub (2 bytes) that lives in the repo so
+    // `cargo check` doesn't fail with a missing-resource error.  A real
+    // PyInstaller build is always several tens of MB.  If the file is smaller
+    // than 10 KB it has not been built yet — skip auto-spawn and tell the
+    // developer to run  `python server/stt_server.py`  manually.
+    match std::fs::metadata(&exe) {
+        Ok(m) if m.len() < 10_000 => {
+            eprintln!(
+                "[transcriber] stt_server stub detected ({} bytes) — not a real build. \
+                 Run `python server/stt_server.py` manually while in dev mode, \
+                 or run server/build_sidecar.ps1 to build the real exe.",
+                m.len()
+            );
+            return;
+        }
+        Err(e) => {
+            eprintln!("[transcriber] Cannot stat stt_server exe: {e}");
+            return;
+        }
+        _ => {} // file exists and is large enough — proceed
+    }
+
     eprintln!(
         "[transcriber] Spawning STT server: {} (whisper={}, port={})",
         exe.display(), model_size, port
