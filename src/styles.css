@@ -37,18 +37,17 @@ html, body, #root {
 }
 
 .stage.entered .genie-wrap {
-  animation: fly-in 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: fly-in 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Pure translate3d + scale only — NO rotate, cheapest GPU path */
+/* Smooth spring fly-in — fewer keyframes = fewer compositor handoffs = no jank */
 @keyframes fly-in {
-  0%   { transform: translate3d(-15px, 340px, 0) scale(0.55); opacity: 0;   }
-  12%  { transform: translate3d(-15px, 260px, 0) scale(0.72); opacity: 1;   }
-  30%  { transform: translate3d(-15px, 120px, 0) scale(1.04); opacity: 1;   }
-  48%  { transform: translate3d(-15px,  36px, 0) scale(1.06); opacity: 1;   }
-  66%  { transform: translate3d(-15px, 140px, 0) scale(0.96); opacity: 1;   }
-  84%  { transform: translate3d(-15px, 195px, 0) scale(0.915); opacity: 1;  }
-  100% { transform: translate3d(-15px, 200px, 0) scale(0.92);  opacity: 1;  }
+  0%   { transform: translate3d(-15px, 360px, 0) scale(0.5);  opacity: 0; }
+  6%   { opacity: 1; }
+  42%  { transform: translate3d(-15px,  75px, 0) scale(1.05); opacity: 1; }
+  62%  { transform: translate3d(-15px, 172px, 0) scale(0.94); opacity: 1; }
+  82%  { transform: translate3d(-15px, 196px, 0) scale(0.925);opacity: 1; }
+  100% { transform: translate3d(-15px, 200px, 0) scale(0.92); opacity: 1; }
 }
 
 /* ── Breathing lives here — child element, no chain conflict ── */
@@ -60,11 +59,11 @@ html, body, #root {
   -webkit-backface-visibility: hidden;
 }
 .stage.entered .genie-float {
-  animation: breathe 3.6s ease-in-out 2.25s infinite;
+  animation: breathe 4.2s ease-in-out 2.65s infinite;
 }
 @keyframes breathe {
   0%, 100% { transform: translate3d(0, 0,    0) scale(1);     }
-  50%       { transform: translate3d(0, -3px, 0) scale(1.016); }
+  50%       { transform: translate3d(0, -4px, 0) scale(1.018); }
 }
 
 /* ─────────────────────────────────────────────
@@ -135,20 +134,21 @@ html, body, #root {
 }
 
 /* ─────────────────────────────────────────────
-   CONTROLS — arc above the genie head
-   Container starts at top:-80px so buttons
-   with negative offsets stay inside bounds
-   (pointer-events require containment)
+   CONTROLS — arc floating just above genie head
+   Container: top:-80px left:-30px so buttons
+   with arc positions stay inside pointer-event
+   bounds. Arc center = genie-wrap (75, 30),
+   radius 60px, angles -60° -20° +20° +60°.
 ───────────────────────────────────────────── */
 .controls {
   position: absolute;
   top: -80px;
-  left: -10px;
-  width: 175px;
-  height: 285px;
+  left: -30px;
+  width: 220px;
+  height: 140px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.28s ease;
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 10;
 }
 .controls.show {
@@ -156,57 +156,65 @@ html, body, #root {
   pointer-events: auto;
 }
 
-/* Modern frosted-glass pill buttons */
+/* Frosted-glass pill buttons — 44×44 for easy tap target */
 .btn {
   position: absolute;
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(15, 15, 20, 0.78);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: rgba(15, 15, 20, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   color: rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.28),
-    0 1px 3px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    0 4px 18px rgba(0, 0, 0, 0.32),
+    0 1px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.15s ease,
+              background 0.15s ease;
   will-change: transform;
 }
 .btn:hover {
-  transform: translateY(-3px) scale(1.06);
-  background: rgba(30, 30, 40, 0.88);
+  transform: translateY(-4px) scale(1.08);
+  background: rgba(30, 30, 42, 0.92);
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.35),
-    0 2px 6px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    0 10px 28px rgba(0, 0, 0, 0.38),
+    0 2px 8px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
-.btn:active { transform: scale(0.92); }
+.btn:active { transform: scale(0.9); transition-duration: 0.08s; }
 
-/* Arc positions — container offset -10px left, -80px top
-   Arc center ≈ wrap (85, 5) → container (95, 85)
-   Radius 62px, angles: -65° -22° +22° +65° */
-.btn-arc-0 { top: 42px;  left: 16px;  }  /* -65° */
-.btn-arc-1 { top:  8px;  left: 52px;  }  /* -22° */
-.btn-arc-2 { top:  8px;  left: 92px;  }  /* +22° */
-.btn-arc-3 { top: 42px;  left: 128px; }  /* +65° */
+/* Arc positions — controls offset (-30px, -80px) from genie-wrap top-left.
+   Arc center in genie-wrap: (75, 30). Radius 60px. Button size 44×44.
+   Formula: left = (arc_cx + R·sin θ) - 30 - 22,  top = (arc_cy - R·cos θ) - (-80) - 22
+   ─────────────────────────────────────────
+   θ = -60°:  gw(75-52,30-30)=(23,0)  → ctrls(53,80)  → btn(31,58)
+   θ = -20°:  gw(75-21,30-56)=(54,-26)→ ctrls(84,54)  → btn(62,32)
+   θ = +20°:  gw(75+21,  -26)=(96,-26)→ ctrls(126,54) → btn(104,32)
+   θ = +60°:  gw(75+52,    0)=(127,0) → ctrls(157,80) → btn(135,58)
+   ───────────────────────────────────────── */
+.btn-arc-0 { top: 58px; left:  31px; }
+.btn-arc-1 { top: 32px; left:  62px; }
+.btn-arc-2 { top: 32px; left: 104px; }
+.btn-arc-3 { top: 58px; left: 135px; }
 
-/* Staggered pop-in when controls appear */
+/* Staggered spring pop-in */
 .controls.show .btn {
-  animation: btn-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: btn-pop 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .controls.show .btn-arc-0 { animation-delay:  0ms; }
-.controls.show .btn-arc-1 { animation-delay: 35ms; }
-.controls.show .btn-arc-2 { animation-delay: 65ms; }
-.controls.show .btn-arc-3 { animation-delay: 95ms; }
+.controls.show .btn-arc-1 { animation-delay: 40ms; }
+.controls.show .btn-arc-2 { animation-delay: 70ms; }
+.controls.show .btn-arc-3 { animation-delay: 105ms; }
 
 @keyframes btn-pop {
-  from { transform: scale(0.4) translateY(6px); opacity: 0; }
+  from { transform: scale(0.3) translateY(8px); opacity: 0; }
   to   { transform: scale(1)   translateY(0);   opacity: 1; }
 }
 

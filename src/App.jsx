@@ -264,28 +264,28 @@ export default function App() {
         {/* Arc controls */}
         <div className={`controls ${hovered ? "show" : ""}`}>
           <button className="btn btn-consent btn-arc-0" onClick={handleDisclaimer} title="Play disclaimer">
-            <svg viewBox="0 0 24 24" width="14" height="14">
+            <svg viewBox="0 0 24 24" width="20" height="20">
               <path d="M3 10v4h3l5 4V6L6 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z" fill="currentColor" />
             </svg>
           </button>
 
           <button className="btn btn-db btn-arc-1" onClick={handleOpenConfig} title="Configure database & AI">
-            <svg viewBox="0 0 24 24" width="14" height="14">
+            <svg viewBox="0 0 24 24" width="20" height="20">
               <path d="M4 6h16M4 10h16M4 14h16M4 18h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
             </svg>
           </button>
 
           {!recording ? (
             <button className="btn btn-rec btn-arc-2" onClick={handleStart} title="Start recording">
-              <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="12" cy="12" r="7" fill="currentColor" /></svg>
+              <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="7" fill="currentColor" /></svg>
             </button>
           ) : paused ? (
             <button className="btn btn-pause btn-arc-2" onClick={handlePauseToggle} title="Resume">
-              <svg viewBox="0 0 24 24" width="13" height="13"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
             </button>
           ) : (
             <button className="btn btn-pause btn-arc-2" onClick={handlePauseToggle} title="Pause">
-              <svg viewBox="0 0 24 24" width="13" height="13">
+              <svg viewBox="0 0 24 24" width="20" height="20">
                 <rect x="6" y="5" width="4" height="14" fill="currentColor" />
                 <rect x="14" y="5" width="4" height="14" fill="currentColor" />
               </svg>
@@ -294,7 +294,7 @@ export default function App() {
 
           {recording && (
             <button className="btn btn-stop btn-arc-3" onClick={handleStop} title="Stop recording">
-              <svg viewBox="0 0 24 24" width="13" height="13"><rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" /></svg>
+              <svg viewBox="0 0 24 24" width="20" height="20"><rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" /></svg>
             </button>
           )}
         </div>
